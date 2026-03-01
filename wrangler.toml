@@ -1,4 +1,4 @@
-name = "telegram-bot-api-proxy"
+name = "tsproxy"
 main = "src/index.js"
 compatibility_date = "2024-01-01"
 
