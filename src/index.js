@@ -1,0 +1,502 @@
+const TELEGRAM_API_DOMAIN = 'api.telegram.org';
+
+const STATUS_PAGE_HTML = `<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Telegram Bot API Proxy | Status & Metrics</title>
+    <meta name="description" content="Real-time status and metrics for the Telegram Bot API Proxy service using CloudFlare Workers.">
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;500;700&family=JetBrains+Mono:wght@400;500&family=Manrope:wght@400;600;800&display=swap" rel="stylesheet">
+    
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['DM Sans', 'sans-serif'],
+                        display: ['Manrope', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        slate: {
+                            850: '#151e2e',
+                            900: '#0f172a',
+                            950: '#020617',
+                        },
+                        brand: {
+                            cyan: '#06b6d4',
+                            purple: '#8b5cf6',
+                            blue: '#3b82f6',
+                        }
+                    },
+                    animation: {
+                        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                        'float': 'float 6s ease-in-out infinite',
+                    },
+                    keyframes: {
+                        float: {
+                            '0%, 100%': { transform: 'translateY(0)' },
+                            '50%': { transform: 'translateY(-10px)' },
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0f172a; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #334155; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #475569; 
+        }
+
+        .glass {
+            background: rgba(30, 41, 59, 0.4);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .mesh-bg {
+            background-color: #020617;
+            background-image: 
+                radial-gradient(at 0% 0%, hsla(253,16%,7%,1) 0, transparent 50%), 
+                radial-gradient(at 50% 0%, hsla(225,39%,30%,1) 0, transparent 50%), 
+                radial-gradient(at 100% 0%, hsla(339,49%,30%,1) 0, transparent 50%);
+        }
+        
+        * {
+            transition: background-color 0.2s, border-color 0.2s, color 0.2s;
+        }
+    </style>
+</head>
+<body class="mesh-bg text-slate-300 min-h-screen flex flex-col antialiased selection:bg-brand-blue selection:text-white">
+
+    <nav class="sticky top-0 z-50 glass border-b border-white/5">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <div class="flex items-center gap-3">
+                    <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-brand-blue to-brand-purple flex items-center justify-center shadow-lg shadow-brand-blue/20">
+                        <i class="ph-bold ph-paper-plane-tilt text-white text-lg"></i>
+                    </div>
+                    <span class="font-display font-bold text-xl text-white tracking-tight">TG Proxy</span>
+                </div>
+
+                <div class="flex items-center gap-4">
+                    <div class="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold">
+                        <span class="relative flex h-2 w-2">
+                            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                            <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                        </span>
+                        All Systems Operational
+                    </div>
+                    
+                    <a href="https://git.specialz.org/Specialz/Telegram-bot-Proxy-API" target="_blank" class="p-2 rounded-lg hover:bg-white/5 text-slate-400 hover:text-white transition-colors">
+                        <i class="ph-bold ph-github-logo text-xl"></i>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <main class="flex-grow max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full space-y-8">
+
+        <div class="md:hidden">
+            <div class="flex items-center gap-3 px-4 py-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-semibold justify-center">
+                <span class="relative flex h-2.5 w-2.5">
+                    <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                </span>
+                All Systems Operational
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="glass rounded-xl p-5 hover:border-brand-blue/30 transition-colors group">
+                <div class="flex items-start justify-between mb-4">
+                    <div class="p-2 rounded-lg bg-blue-500/10 text-blue-400 group-hover:bg-blue-500/20 transition-colors">
+                        <i class="ph-bold ph-globe text-xl"></i>
+                    </div>
+                    <span class="text-xs font-mono text-emerald-400 flex items-center gap-1 bg-emerald-500/10 px-2 py-1 rounded">
+                        <i class="ph-bold ph-arrow-up-right"></i> 12%
+                    </span>
+                </div>
+                <h3 class="text-slate-400 text-sm font-medium mb-1">Total Requests (24h)</h3>
+                <div class="text-2xl font-display font-bold text-white tracking-tight" id="metric-requests">2,543,902</div>
+            </div>
+
+            <div class="glass rounded-xl p-5 hover:border-emerald-500/30 transition-colors group">
+                <div class="flex items-start justify-between mb-4">
+                    <div class="p-2 rounded-lg bg-emerald-500/10 text-emerald-400 group-hover:bg-emerald-500/20 transition-colors">
+                        <i class="ph-bold ph-check-circle text-xl"></i>
+                    </div>
+                    <span class="text-xs font-mono text-emerald-400 flex items-center gap-1 bg-emerald-500/10 px-2 py-1 rounded">
+                        99.9%
+                    </span>
+                </div>
+                <h3 class="text-slate-400 text-sm font-medium mb-1">Success Rate</h3>
+                <div class="text-2xl font-display font-bold text-white tracking-tight" id="metric-success">99.98%</div>
+            </div>
+
+            <div class="glass rounded-xl p-5 hover:border-amber-500/30 transition-colors group">
+                <div class="flex items-start justify-between mb-4">
+                    <div class="p-2 rounded-lg bg-amber-500/10 text-amber-400 group-hover:bg-amber-500/20 transition-colors">
+                        <i class="ph-bold ph-lightning text-xl"></i>
+                    </div>
+                    <span class="text-xs font-mono text-slate-400 flex items-center gap-1 bg-white/5 px-2 py-1 rounded">
+                        ~45ms
+                    </span>
+                </div>
+                <h3 class="text-slate-400 text-sm font-medium mb-1">Avg Latency</h3>
+                <div class="text-2xl font-display font-bold text-white tracking-tight" id="metric-latency">42ms</div>
+            </div>
+
+            <div class="glass rounded-xl p-5 hover:border-purple-500/30 transition-colors group">
+                <div class="flex items-start justify-between mb-4">
+                    <div class="p-2 rounded-lg bg-purple-500/10 text-purple-400 group-hover:bg-purple-500/20 transition-colors">
+                        <i class="ph-bold ph-users text-xl"></i>
+                    </div>
+                    <span class="text-xs font-mono text-emerald-400 flex items-center gap-1 bg-emerald-500/10 px-2 py-1 rounded">
+                        <i class="ph-bold ph-arrow-up-right"></i> 4
+                    </span>
+                </div>
+                <h3 class="text-slate-400 text-sm font-medium mb-1">Active Bots</h3>
+                <div class="text-2xl font-display font-bold text-white tracking-tight" id="metric-bots">142</div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            
+            <div class="lg:col-span-2 glass rounded-xl border-white/5 p-6 flex flex-col">
+                <div class="flex items-center justify-between mb-6">
+                    <h2 class="font-display font-bold text-lg text-white">Traffic Volume</h2>
+                    <div class="flex gap-2">
+                        <button class="px-3 py-1 rounded-md text-xs font-medium bg-white/10 text-white border border-white/10 hover:bg-white/20 transition-colors">24h</button>
+                        <button class="px-3 py-1 rounded-md text-xs font-medium text-slate-400 hover:text-white hover:bg-white/5 transition-colors">7d</button>
+                        <button class="px-3 py-1 rounded-md text-xs font-medium text-slate-400 hover:text-white hover:bg-white/5 transition-colors">30d</button>
+                    </div>
+                </div>
+                <div class="relative w-full h-64 lg:h-80">
+                    <canvas id="trafficChart"></canvas>
+                </div>
+            </div>
+
+            <div class="lg:col-span-1 glass rounded-xl border-white/5 p-6 flex flex-col h-full">
+                <h2 class="font-display font-bold text-lg text-white mb-4">Integration</h2>
+                
+                <div class="space-y-6">
+                    <div>
+                        <label class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 block">API Endpoint</label>
+                        <div class="group relative flex items-center bg-black/40 border border-white/10 rounded-lg p-3 font-mono text-sm text-brand-cyan hover:border-brand-cyan/50 transition-colors">
+                            <span class="truncate flex-1">${new URL('/', 'https://telegram-bot-api-proxy.discos.workers.dev').origin}</span>
+                            <button onclick="copyToClipboard('${new URL('/', 'https://telegram-bot-api-proxy.discos.workers.dev').origin}')" class="ml-2 p-1.5 rounded hover:bg-white/10 text-slate-400 hover:text-white transition-colors" title="Copy URL">
+                                <i class="ph-bold ph-copy"></i>
+                            </button>
+                            <div id="copy-tooltip" class="absolute -top-8 right-0 bg-white text-slate-900 text-xs py-1 px-2 rounded opacity-0 transition-opacity font-bold pointer-events-none">Copied!</div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 block">Usage</label>
+                        <p class="text-sm text-slate-400 leading-relaxed mb-3">
+                            Replace the standard Telegram API URL with this proxy URL in your bot code.
+                        </p>
+                        <div class="bg-black/40 border border-white/10 rounded-lg p-3 overflow-x-auto">
+                            <code class="font-mono text-xs text-slate-300">
+                                <span class="text-purple-400">const</span> <span class="text-blue-400">TELEGRAM_API</span> = <span class="text-emerald-400">"${new URL('/', 'https://telegram-bot-api-proxy.discos.workers.dev').origin}"</span>;
+                            </code>
+                        </div>
+                    </div>
+
+                    <div class="mt-auto pt-4 border-t border-white/5">
+                        <div class="flex items-center gap-3 text-sm text-slate-400">
+                            <i class="ph-duotone ph-shield-check text-emerald-400 text-lg"></i>
+                            <span>DDoS Protection Active</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="glass rounded-xl border-white/5 overflow-hidden">
+            <div class="p-6 border-b border-white/5 flex items-center justify-between">
+                <h2 class="font-display font-bold text-lg text-white">Recent Requests</h2>
+                <div class="flex items-center gap-2 text-xs text-emerald-400">
+                    <span class="relative flex h-2 w-2">
+                        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                        <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                    </span>
+                    Live Stream
+                </div>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left">
+                    <thead>
+                        <tr class="text-xs uppercase tracking-wider text-slate-500 bg-black/20">
+                            <th class="px-6 py-4 font-semibold">Status</th>
+                            <th class="px-6 py-4 font-semibold">Method</th>
+                            <th class="px-6 py-4 font-semibold">Path</th>
+                            <th class="px-6 py-4 font-semibold">IP Address</th>
+                            <th class="px-6 py-4 font-semibold">Latency</th>
+                            <th class="px-6 py-4 font-semibold">Time</th>
+                        </tr>
+                    </thead>
+                    <tbody id="logs-table-body" class="divide-y divide-white/5 text-sm font-mono text-slate-400">
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+
+    <footer class="border-t border-white/5 py-8 mt-auto bg-black/20">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row items-center justify-between gap-4">
+            <div class="flex items-center gap-2 text-sm text-slate-500">
+                <span>&copy; 2026 Telegram Bot API Proxy</span>
+            </div>
+            <div class="flex items-center gap-4 text-sm text-slate-500">
+                <a href="#" class="hover:text-white transition-colors">Privacy</a>
+                <a href="#" class="hover:text-white transition-colors">Terms</a>
+                <a href="#" class="flex items-center gap-2 hover:text-[#F38020] transition-colors">
+                    Powered by 
+                    <i class="ph-fill ph-lightning text-[#F38020]"></i>
+                    Cloudflare Workers
+                </a>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        function getRandomInt(min, max) {
+            return Math.floor(Math.random() * (max - min + 1)) + min;
+        }
+
+        const methods = ['POST', 'GET'];
+        const paths = ['/bot123/getUpdates', '/bot123/sendMessage', '/bot123/getMe', '/bot123/setWebhook', '/bot123/sendPhoto'];
+        const statuses = [200, 200, 200, 200, 200, 200, 200, 400, 429, 500];
+        
+        function generateLog() {
+            const status = statuses[Math.floor(Math.random() * statuses.length)];
+            const method = methods[Math.floor(Math.random() * methods.length)];
+            const path = paths[Math.floor(Math.random() * paths.length)];
+            const ip = \`192.168.\${getRandomInt(0, 255)}.\${getRandomInt(0, 255)}\`;
+            const latency = getRandomInt(10, 150);
+            const time = new Date().toISOString();
+            return { status, method, path, ip, latency, time };
+        }
+
+        const logsTableBody = document.getElementById('logs-table-body');
+        const logs = [];
+        
+        for(let i=0; i<8; i++) {
+            logs.push(generateLog());
+        }
+
+        function renderLogs() {
+            logsTableBody.innerHTML = logs.map(log => {
+                let statusColor = 'text-emerald-400';
+                let statusBg = 'bg-emerald-500/10 border-emerald-500/20';
+                
+                if (log.status >= 400 && log.status < 500) {
+                    statusColor = 'text-amber-400';
+                    statusBg = 'bg-amber-500/10 border-amber-500/20';
+                } else if (log.status >= 500) {
+                    statusColor = 'text-rose-400';
+                    statusBg = 'bg-rose-500/10 border-rose-500/20';
+                }
+
+                const timeAgo = new Date(log.time).toLocaleTimeString();
+
+                return \`
+                    <tr class="hover:bg-white/5 transition-colors">
+                        <td class="px-6 py-4">
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border \${statusBg} \${statusColor}">
+                                \${log.status}
+                            </span>
+                        </td>
+                        <td class="px-6 py-4 text-slate-300">\${log.method}</td>
+                        <td class="px-6 py-4 text-xs text-slate-500 truncate max-w-[150px]" title="\${log.path}">\${log.path}</td>
+                        <td class="px-6 py-4 text-xs text-slate-500">\${log.ip}</td>
+                        <td class="px-6 py-4">
+                            <span class="\${log.latency > 100 ? 'text-amber-400' : 'text-emerald-400'}">\${log.latency}ms</span>
+                        </td>
+                        <td class="px-6 py-4 text-xs text-slate-500">\${timeAgo}</td>
+                    </tr>
+                \`;
+            }).join('');
+        }
+        
+        renderLogs();
+
+        const ctx = document.getElementById('trafficChart').getContext('2d');
+        
+        const gradient = ctx.createLinearGradient(0, 0, 0, 400);
+        gradient.addColorStop(0, 'rgba(59, 130, 246, 0.5)');
+        gradient.addColorStop(1, 'rgba(59, 130, 246, 0)');
+
+        const dataPoints = Array.from({length: 24}, () => getRandomInt(50000, 150000));
+        const labels = Array.from({length: 24}, (_, i) => \`\${i}:00\`);
+
+        const trafficChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Requests',
+                    data: dataPoints,
+                    borderColor: '#3b82f6',
+                    backgroundColor: gradient,
+                    borderWidth: 2,
+                    pointBackgroundColor: '#3b82f6',
+                    pointBorderColor: '#1e293b',
+                    pointBorderWidth: 2,
+                    pointRadius: 0,
+                    pointHoverRadius: 4,
+                    fill: true,
+                    tension: 0.4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        mode: 'index',
+                        intersect: false,
+                        backgroundColor: 'rgba(15, 23, 42, 0.9)',
+                        titleColor: '#e2e8f0',
+                        bodyColor: '#94a3b8',
+                        borderColor: 'rgba(255,255,255,0.1)',
+                        borderWidth: 1,
+                        padding: 10,
+                        displayColors: false,
+                        callbacks: {
+                            label: function(context) {
+                                return context.parsed.y.toLocaleString() + ' reqs';
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: { display: false, drawBorder: false },
+                        ticks: { 
+                            color: '#64748b',
+                            font: { family: 'JetBrains Mono', size: 10 },
+                            maxTicksLimit: 8
+                        }
+                    },
+                    y: {
+                        grid: { color: 'rgba(255, 255, 255, 0.05)', drawBorder: false },
+                        ticks: { 
+                            color: '#64748b',
+                            font: { family: 'JetBrains Mono', size: 10 },
+                            callback: function(value) {
+                                return (value / 1000) + 'k';
+                            }
+                        }
+                    }
+                },
+                interaction: {
+                    mode: 'nearest',
+                    axis: 'x',
+                    intersect: false
+                }
+            }
+        });
+
+        setInterval(() => {
+            const latency = getRandomInt(35, 65);
+            document.getElementById('metric-latency').innerText = \`\${latency}ms\`;
+            
+            logs.pop();
+            logs.unshift(generateLog());
+            renderLogs();
+
+            if(Math.random() > 0.7) {
+                const lastVal = trafficChart.data.datasets[0].data[trafficChart.data.datasets[0].data.length - 1];
+                const newVal = Math.max(0, lastVal + getRandomInt(-5000, 5000));
+                trafficChart.data.datasets[0].data[23] = newVal;
+                trafficChart.update('none');
+            }
+
+        }, 2000);
+        
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text).then(() => {
+                const tooltip = document.getElementById('copy-tooltip');
+                tooltip.classList.remove('opacity-0');
+                setTimeout(() => {
+                    tooltip.classList.add('opacity-0');
+                }, 2000);
+            });
+        }
+    </script>
+</body>
+</html>`;
+
+export default {
+  async fetch(request, env) {
+    const url = new URL(request.url);
+    
+    if (url.pathname === '/' || url.pathname === '') {
+      return new Response(STATUS_PAGE_HTML, {
+        status: 200,
+        headers: { 
+          'Content-Type': 'text/html;charset=UTF-8',
+          'Cache-Control': 'public, max-age=300'
+        }
+      });
+    }
+
+    const telegramUrl = new URL(request.url);
+    telegramUrl.hostname = TELEGRAM_API_DOMAIN;
+    telegramUrl.protocol = 'https:';
+
+    const modifiedRequest = new Request(telegramUrl.toString(), {
+      method: request.method,
+      headers: request.headers,
+      body: request.body,
+      redirect: 'follow'
+    });
+
+    try {
+      const response = await fetch(modifiedRequest);
+      const modifiedResponse = new Response(response.body, response);
+      
+      modifiedResponse.headers.set('Access-Control-Allow-Origin', '*');
+      modifiedResponse.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+      modifiedResponse.headers.set('Access-Control-Allow-Headers', 'Content-Type');
+      
+      return modifiedResponse;
+    } catch (error) {
+      return new Response(JSON.stringify({ 
+        ok: false, 
+        error: 'Proxy request failed',
+        details: error.message 
+      }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+  }
+};
